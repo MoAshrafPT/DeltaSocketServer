@@ -1,4 +1,3 @@
-import Quill from "quill";
 const axios = require("axios");
 //const { default: Quill } = require("quill");
 //var quill = new Quill;
@@ -20,14 +19,13 @@ io.on("connection", (socket) => {
     if (!documentsOperations.has(documentId)) {//if the document is not in the map create a new entry
       documentsOperations.set(documentId, []);
     }
-    socket.on("send-changes", (delta, clientVersion) => {
+    socket.on("send-changes", (delta, clientVersion, acknowledgeID) => {
       let operations = documentsOperations.get(documentId); //get the operations for the document
       let serverVersion = operations.length;
       delta = operationalTransform(delta, operations, clientVersion, serverVersion);
-
-      socket.broadcast.to(documentId).emit("receive-changes", { delta, serverVersion }); // QUESTION: should we increment the server version before or after broadcasting the changes?
       operations.push({ delta, currentversion });
-      serverVersion++;
+      let tempV = serverVersion + 1;
+      socket.broadcast.to(documentId).emit("receive-changes", { delta, tempV, acknowledgeID }); // QUESTION: should we increment the server version before or after broadcasting the changes?
     });
 
     socket.on("save-document", async (data) => {
@@ -65,30 +63,30 @@ async function findByIdAndUpdate(documentId, userId, { data }) {
 }
 
 function operationalTransform(delta, operations, clientVersion, serverVersion) {
-  if(!('retain' in delta.ops[0])){
-    delta.ops.unshift({'retain': 0});
+  if (!('retain' in delta.ops[0])) {
+    delta.ops.unshift({ 'retain': 0 });
   }
   if (clientVersion >= serverVersion) {
     return delta;
   }
   for (let i = clientVersion + 1; i <= serverVersion; i++) {
-    if ('insert' in delta.ops[1]){
-      if('insert' in operations[i].ops[1]){
-        if(delta.ops[0].retain >= operations[i].ops[0].retain){
+    if ('insert' in delta.ops[1]) {
+      if ('insert' in operations[i].ops[1]) {
+        if (delta.ops[0].retain >= operations[i].ops[0].retain) {
           delta.ops[0].retain += operations[i].ops[1].length;
         }
-      }else if('delete' in operations[i].ops[1]){
-        if(delta.ops[0].retain >= operations[i].ops[0].retain){
+      } else if ('delete' in operations[i].ops[1]) {
+        if (delta.ops[0].retain >= operations[i].ops[0].retain) {
           delta.ops[0].retain -= operations[i].ops[1];
         }
       }
-    }else if('delete' in delta.ops[1]){
-      if('insert' in operations[i].ops[1]){
-        if(delta.ops[0].retain >= operations[i].ops[0].retain){
+    } else if ('delete' in delta.ops[1]) {
+      if ('insert' in operations[i].ops[1]) {
+        if (delta.ops[0].retain >= operations[i].ops[0].retain) {
           delta.ops[0].retain += operations[i].ops[1].length;
         }
-      }else if('delete' in operations[i].ops[1]){
-        if(delta.ops[0].retain >= operations[i].ops[0].retain){
+      } else if ('delete' in operations[i].ops[1]) {
+        if (delta.ops[0].retain >= operations[i].ops[0].retain) {
           delta.ops[0].retain -= operations[i].ops[1];
         }
       }
