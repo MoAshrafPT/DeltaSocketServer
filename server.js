@@ -22,19 +22,25 @@ io.on("connection", (socket) => {
     socket.on("send-changes", (delta, clientVersion, acknowledgeID) => {
       console.log("I am in send-changes");
       let operations = documentsOperations.get(documentId); //get the operations for the document
-      console.log(operations, "operations");
       serverVersion = operations.length;
-      if(serverVersion !==0)
+      if (serverVersion !== 0)
         delta = operationalTransform(delta, operations, clientVersion, serverVersion);
-      operations.push(delta);
+      let modifiedDelta = delta;
+      if (modifiedDelta.ops[0] && !('retain' in modifiedDelta.ops[0])) {
+        modifiedDelta.ops.unshift({ 'retain': 0 });
+      }
+      operations.push(modifiedDelta);
       let tempV = serverVersion + 1;
-      console.log(tempV);
-      socket.broadcast.to(documentId).emit("receive-changes",  delta, tempV, acknowledgeID ); // QUESTION: should we increment the server version before or after broadcasting the changes?
-      socket.emit("acknowledge", acknowledgeID,tempV);
+      if (delta.ops[0] && delta.ops[0].retain == 0) {
+        delta.ops = [delta.ops[1]];
+      }
+      console.log(tempV, delta);
+      socket.broadcast.to(documentId).emit("receive-changes", delta, tempV, acknowledgeID); // QUESTION: should we increment the server version before or after broadcasting the changes?
+      socket.emit("acknowledge", acknowledgeID, tempV);
     });
 
     socket.on("save-document", async (data) => {
-     // console.log("I am being called");
+      // console.log("I am being called");
       await findByIdAndUpdate(documentId, userId, { data });
     });
   });
@@ -62,47 +68,66 @@ async function findByIdAndUpdate(documentId, userId, { data }) {
 
     ;
   if (result.data) {
-   // console.log(result.data);
+    // console.log(result.data);
     return result.data.fileContent;
   }
 }
 
 function operationalTransform(delta, operations, clientVersion, serverVersion) {
 
-  console.log("I am in operationalTransform", delta, operations, clientVersion, serverVersion);
+  console.log("I am in operationalTransform", delta, clientVersion, serverVersion);
 
-
-  // if (!('retain' in delta.ops[0])) {
-  //   delta.ops.unshift({ 'retain': 0 });
-  // }
+  let varIdx = 1;
+  if (delta.ops[0] && !('retain' in delta.ops[0])) {
+    delta.ops.unshift({ 'retain': 0 });
+    console.log("unsaewaewadsshifting delta:", delta);
+  }
   if (clientVersion >= serverVersion) {
+    if (delta.ops[0] && delta.ops[0].retain == 0) {
+      delta.ops = [delta.ops[1]];
+    }
+    console.log("I am returning delta", delta);
     return delta;
   }
   for (let i = clientVersion; i < serverVersion; i++) {
+    if (operations[i].ops[0] && !('retain' in operations[i].ops[0])) {
+      operations[i].ops.unshift({ 'retain': 0 });
+    }
     console.log("I survived", i, "times");
     console.log(delta.ops, "delta.ops");
     console.log(operations[i], "operations[i]");
     if ('insert' in delta.ops[1]) {
       if ('insert' in operations[i].ops[1]) {
         if (delta.ops[0].retain >= operations[i].ops[0].retain) {
-          delta.ops[0].retain += operations[i].ops[1].length;
+          console.log("I am insert insert", i);
+          console.log(delta.ops[0].retain, "Retain1 in insert insert");
+          console.log(operations[i].ops[1].insert.length, "Retain2 in insert insert");
+          console.log(delta.ops[0].retain + operations[i].ops[1].insert.length, "Retain3 in insert insert");
+          delta.ops[0].retain += operations[i].ops[1].insert.length-1;
+          console.log(delta.ops[0].retain, "Retain4 in insert insert");
         }
       } else if ('delete' in operations[i].ops[1]) {
         if (delta.ops[0].retain >= operations[i].ops[0].retain) {
-          delta.ops[0].retain -= operations[i].ops[1];
+          delta.ops[0].retain -= operations[i].ops[1].delete;
+          console.log("I am insert delete");
         }
       }
     } else if ('delete' in delta.ops[1]) {
       if ('insert' in operations[i].ops[1]) {
         if (delta.ops[0].retain >= operations[i].ops[0].retain) {
-          delta.ops[0].retain += operations[i].ops[1].length;
+          delta.ops[0].retain += operations[i].ops[1].insert.length-1;
+          console.log("I am delete insert");
         }
       } else if ('delete' in operations[i].ops[1]) {
         if (delta.ops[0].retain >= operations[i].ops[0].retain) {
-          delta.ops[0].retain -= operations[i].ops[1];
+          delta.ops[0].retain -= operations[i].ops[1].delete;
+          console.log("I am delete delete");
         }
       }
     }
+  }
+  if (delta.ops[0] && delta.ops[0].retain == 0) {
+    delta.ops = [delta.ops[1]];
   }
   console.log("I am returning delta", delta);
   return delta;
