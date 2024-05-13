@@ -8,14 +8,14 @@ const io = require("socket.io")(3001, {
     methods: ["GET", "POST"],
   },
 });
-
+let serverVersion = 0;
 let documentsOperations = new Map(); // {documentId: [operations]}
 io.on("connection", (socket) => {
   socket.on("get-document", async (documentId, userId) => {
     const document = await findOrCreateDocument(documentId, userId);
     console.log("got this document:", document);
     socket.join(documentId);
-    socket.emit("load-document", document);
+    socket.emit("load-document", document, serverVersion);
     if (!documentsOperations.has(documentId)) {//if the document is not in the map create a new entry
       documentsOperations.set(documentId, []);
     }
@@ -23,7 +23,7 @@ io.on("connection", (socket) => {
       console.log("I am in send-changes");
       let operations = documentsOperations.get(documentId); //get the operations for the document
       console.log(operations, "operations");
-      let serverVersion = operations.length;
+      serverVersion = operations.length;
       if(serverVersion !==0)
         delta = operationalTransform(delta, operations, clientVersion, serverVersion);
       operations.push(delta);
@@ -80,6 +80,8 @@ function operationalTransform(delta, operations, clientVersion, serverVersion) {
   }
   for (let i = clientVersion; i < serverVersion; i++) {
     console.log("I survived", i, "times");
+    console.log(delta.ops, "delta.ops");
+    console.log(operations[i], "operations[i]");
     if ('insert' in delta.ops[1]) {
       if ('insert' in operations[i].ops[1]) {
         if (delta.ops[0].retain >= operations[i].ops[0].retain) {
