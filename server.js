@@ -128,7 +128,7 @@ function operationalTransform(delta, operations, clientVersion, serverVersion) {
             delta.ops[0].retain + operations[i].ops[1].insert.length,
             "Retain3 in insert insert"
           );
-          delta.ops[0].retain += operations[i].ops[1].insert.length - 1;
+          delta.ops[0].retain += operations[i].ops[1].insert.length;
           console.log(delta.ops[0].retain, "Retain4 in insert insert");
         }
       } else if ("delete" in operations[i].ops[1]) {
@@ -140,7 +140,7 @@ function operationalTransform(delta, operations, clientVersion, serverVersion) {
     } else if ("delete" in delta.ops[1]) {
       if ("insert" in operations[i].ops[1]) {
         if (delta.ops[0].retain >= operations[i].ops[0].retain) {
-          delta.ops[0].retain += operations[i].ops[1].insert.length - 1;
+          delta.ops[0].retain += operations[i].ops[1].insert.length;
           console.log("I am delete insert");
         }
       } else if ("delete" in operations[i].ops[1]) {
