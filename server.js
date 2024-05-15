@@ -27,6 +27,7 @@ io.on("connection", (socket) => {
       console.log("I am in send-changes");
 
       await lock.acquire(documentId, async () => {
+        console.log("I am in lock");
         let operations = documentsOperations.get(documentId); // Get the operations for the document
         serverVersion = operations.length;
 
@@ -47,12 +48,15 @@ io.on("connection", (socket) => {
         }
 
         console.log(tempV, delta);
-        socket.broadcast
-          .to(documentId)
-          .emit("receive-changes", delta, tempV, acknowledgeID); // Broadcast changes
+        io.sockets.to(documentId).emit("receive-changes", delta, tempV, acknowledgeID);
+        // socket.broadcast
+        //   .to(documentId)
+        //   .emit("receive-changes", delta, tempV, acknowledgeID); // Broadcast changes
 
-        socket.emit("acknowledge", acknowledgeID, tempV);
+        //socket.emit("acknowledge", acknowledgeID, tempV);
+        console.log("I am out of lock");
       });
+
     });
 
     socket.on("cursor-change", (cursor) => {
@@ -107,7 +111,7 @@ function operationalTransform(delta, operations, clientVersion, serverVersion) {
   }
 
   if (clientVersion >= serverVersion) {
-    if (delta.ops[0] && delta.ops[0].retain == 0) {
+    if (delta.ops[0] && delta.ops[0].retain === 0) {
       delta.ops = [delta.ops[1]];
     }
     console.log("I am returning delta", delta);
@@ -127,7 +131,9 @@ function operationalTransform(delta, operations, clientVersion, serverVersion) {
       if ("insert" in operations[i].ops[1]) {
         if (delta.ops[0].retain >= operations[i].ops[0].retain) {
           console.log("I am insert insert", i);
-          delta.ops[0].retain += operations[i].ops[1].insert.length - 1;
+          delta.ops[0].retain += operations[i].ops[1].insert.length;
+        } else {
+          console.log("I am insert insert not error", i);
         }
       } else if ("delete" in operations[i].ops[1]) {
         if (delta.ops[0].retain >= operations[i].ops[0].retain) {
@@ -138,7 +144,7 @@ function operationalTransform(delta, operations, clientVersion, serverVersion) {
     } else if ("delete" in delta.ops[1]) {
       if ("insert" in operations[i].ops[1]) {
         if (delta.ops[0].retain >= operations[i].ops[0].retain) {
-          delta.ops[0].retain += operations[i].ops[1].insert.length - 1;
+          delta.ops[0].retain += operations[i].ops[1].insert.length;
           console.log("I am delete insert");
         }
       } else if ("delete" in operations[i].ops[1]) {
@@ -150,7 +156,7 @@ function operationalTransform(delta, operations, clientVersion, serverVersion) {
     }
   }
 
-  if (delta.ops[0] && delta.ops[0].retain == 0) {
+  if (delta.ops[0] && delta.ops[0].retain === 0) {
     delta.ops = [delta.ops[1]];
   }
 
